@@ -16,7 +16,7 @@
 
 #include "core/types.h"
 
-#define GGUF_MAGIC       0x46475547  /* "GGUF" in little-endian */
+#define GGUF_MAGIC       0x46554747  /* "GGUF" as little-endian uint32 */
 #define GGUF_VERSION_MIN 2
 #define GGUF_VERSION_MAX 3
 #define GGUF_DEFAULT_ALIGNMENT 32
