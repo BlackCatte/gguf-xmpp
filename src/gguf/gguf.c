@@ -212,7 +212,7 @@ gxmpp_result_t gguf_open(const char *path, gguf_ctx_t **out)
     reader_t r = { .data = mapped, .len = file_size, .pos = 0 };
 
     /* Read header */
-    uint32_t magic;
+    uint32_t magic = 0;
     if (!read_u32(&r, &magic) || magic != GGUF_MAGIC) {
         fprintf(stderr, "gguf: invalid magic: 0x%08x\n", magic);
         munmap(mapped, file_size);

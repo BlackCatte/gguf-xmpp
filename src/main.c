@@ -86,6 +86,7 @@ static void print_usage(const char *prog)
         "  --top-p <f>           Nucleus sampling threshold (default: 0.9)\n"
         "  --top-k <n>           Top-K sampling (default: 40)\n"
         "  --max-tokens <n>      Max tokens to generate (default: 512)\n"
+        "  --ctx-size <n>        KV cache context size (default: 2048)\n"
         "  --status <text>       XMPP presence status message\n"
         "  --help                Show this help\n",
         prog);
@@ -104,6 +105,7 @@ int main(int argc, char **argv)
     float top_p = 0.9f;
     int top_k = 40;
     int max_tokens = 512;
+    int ctx_size = 2048;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--model") == 0 && i + 1 < argc)
@@ -126,6 +128,8 @@ int main(int argc, char **argv)
             top_k = atoi(argv[++i]);
         else if (strcmp(argv[i], "--max-tokens") == 0 && i + 1 < argc)
             max_tokens = atoi(argv[++i]);
+        else if (strcmp(argv[i], "--ctx-size") == 0 && i + 1 < argc)
+            ctx_size = atoi(argv[++i]);
         else if (strcmp(argv[i], "--status") == 0 && i + 1 < argc)
             status = argv[++i];
         else if (strcmp(argv[i], "--help") == 0) {
@@ -152,7 +156,7 @@ int main(int argc, char **argv)
 
     /* Load LLM model */
     fprintf(stderr, "Loading model: %s\n", model_path);
-    gxmpp_result_t res = gxmpp_model_load(model_path, &app.model);
+    gxmpp_result_t res = gxmpp_model_load(model_path, &app.model, ctx_size);
     if (res != GXMPP_OK) {
         fprintf(stderr, "Failed to load model: %d\n", res);
         return 1;

@@ -70,8 +70,9 @@ typedef struct {
     gxmpp_sample_params_t sample;
 } gxmpp_model_t;
 
-/* Load model from GGUF file */
-gxmpp_result_t gxmpp_model_load(const char *path, gxmpp_model_t **model);
+/* Load model from GGUF file. ctx_size caps the KV cache allocation. */
+gxmpp_result_t gxmpp_model_load(const char *path, gxmpp_model_t **model,
+                                int ctx_size);
 
 /* Free model */
 void gxmpp_model_free(gxmpp_model_t *model);

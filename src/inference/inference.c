@@ -189,30 +189,59 @@ static gxmpp_result_t load_tokenizer(gguf_ctx_t *gguf, gxmpp_tokenizer_t *tok)
     return GXMPP_OK;
 }
 
-gxmpp_result_t gxmpp_model_load(const char *path, gxmpp_model_t **out)
+gxmpp_result_t gxmpp_model_load(const char *path, gxmpp_model_t **out,
+                                int ctx_size)
 {
     gxmpp_model_t *model = calloc(1, sizeof(gxmpp_model_t));
     if (!model) return GXMPP_ERR_MEMORY;
 
+    fprintf(stderr, "Opening GGUF file...\n");
     gxmpp_result_t res = gguf_open(path, &model->gguf);
     if (res != GXMPP_OK) {
+        fprintf(stderr, "gguf_open failed: %d\n", res);
         free(model);
         return res;
     }
+    fprintf(stderr, "GGUF opened: version=%u tensors=%lu kv=%lu\n",
+            model->gguf->version,
+            (unsigned long)model->gguf->n_tensors,
+            (unsigned long)model->gguf->n_kv);
 
     extract_hparams(model->gguf, &model->hparams);
 
+    gxmpp_hparams_t *hp = &model->hparams;
+    fprintf(stderr, "Hyperparameters: arch=%s vocab=%u embd=%u heads=%u/%u "
+                    "layers=%u ff=%u ctx=%u\n",
+            hp->arch, hp->n_vocab, hp->n_embd, hp->n_heads, hp->n_heads_kv,
+            hp->n_layers, hp->n_ff, hp->n_ctx);
+
     res = load_tokenizer(model->gguf, &model->tokenizer);
     if (res != GXMPP_OK) {
+        fprintf(stderr, "load_tokenizer failed: %d\n", res);
         gguf_close(model->gguf);
         free(model);
         return res;
     }
+    fprintf(stderr, "Tokenizer loaded: vocab=%u bos=%d eos=%d merges=%u\n",
+            model->tokenizer.n_vocab, model->tokenizer.bos_id,
+            model->tokenizer.eos_id, model->tokenizer.n_merges);
 
     /* Allocate KV cache */
-    gxmpp_hparams_t *hp = &model->hparams;
     uint32_t n_embd_kv = (hp->n_embd / hp->n_heads) * hp->n_heads_kv;
-    size_t kv_size = (size_t)hp->n_layers * hp->n_ctx * n_embd_kv * sizeof(float);
+
+    /* Cap context length for KV cache allocation */
+    uint32_t kv_ctx = hp->n_ctx;
+    if (ctx_size > 0 && (uint32_t)ctx_size < kv_ctx) {
+        fprintf(stderr, "Capping KV cache context from %u to %d "
+                        "(override with --ctx-size)\n",
+                kv_ctx, ctx_size);
+        kv_ctx = (uint32_t)ctx_size;
+    }
+
+    size_t kv_size = (size_t)hp->n_layers * kv_ctx * n_embd_kv * sizeof(float);
+    fprintf(stderr, "Allocating KV cache: %zu MB "
+                    "(layers=%u ctx=%u kv_dim=%u)\n",
+            kv_size / (1024 * 1024), hp->n_layers, kv_ctx, n_embd_kv);
 
     model->kv_cache.k = calloc(1, kv_size);
     model->kv_cache.v = calloc(1, kv_size);
@@ -220,13 +249,18 @@ gxmpp_result_t gxmpp_model_load(const char *path, gxmpp_model_t **out)
     model->kv_cache.pos = 0;
 
     if (!model->kv_cache.k || !model->kv_cache.v) {
+        fprintf(stderr, "KV cache allocation failed (%zu bytes)\n", kv_size);
         gxmpp_model_free(model);
         return GXMPP_ERR_MEMORY;
     }
 
-    /* Scratch arena: 256MB should be sufficient for most models */
-    model->scratch = gxmpp_arena_create(256 * 1024 * 1024);
+    /* Scratch arena: 512MB for larger models */
+    size_t scratch_size = 512 * 1024 * 1024;
+    fprintf(stderr, "Allocating scratch arena: %zu MB\n",
+            scratch_size / (1024 * 1024));
+    model->scratch = gxmpp_arena_create(scratch_size);
     if (!model->scratch) {
+        fprintf(stderr, "Scratch arena allocation failed\n");
         gxmpp_model_free(model);
         return GXMPP_ERR_MEMORY;
     }
